@@ -1,0 +1,31 @@
+C:\VideoEncoder\
+├── bin\                          # Binaires (ffmpeg, ffprobe, mkvtoolnix, dovi_tool)
+├── scripts\
+│   ├── Install-Dependencies.ps1
+│   ├── Invoke-VideoEncoder.ps1   # Script principal
+│   ├── modules\
+│   │   ├── Logging.psm1
+│   │   ├── MediaAnalysis.psm1
+│   │   ├── Encoding.psm1
+│   │   ├── Validation.psm1
+│   │   └── StateManager.psm1
+│   └── Start-EncoderService.ps1  # Wrapper pour scheduled task
+├── state\
+│   ├── queue.json                # File d'attente persistante
+│   ├── processed.db              # SQLite : historique complet
+│   ├── failed.json               # Fichiers en échec
+│   ├── skipped.json              # Fichiers ignorés (déjà HEVC, DV, etc.)
+│   └── lock.pid                  # Verrou anti double-exécution
+├── temp\                         # Encodages en cours (sur disque rapide)
+│   └── <jobid>\
+│       ├── source.<ext>          # Lien symbolique vers la source
+│       └── output.mkv            # Sortie en cours d'écriture
+├── logs\
+│   ├── main\                     # Log général rotatif
+│   ├── jobs\                     # 1 log par fichier traité
+│   ├── ffmpeg\                   # Sortie brute FFmpeg
+│   └── crashes\                  # Dumps en cas d'erreur
+├── reports\
+│   └── daily\                    # Rapports quotidiens (gain, ETA, échecs)
+└── config\
+    └── encoder.config.json       # Configuration centralisée
