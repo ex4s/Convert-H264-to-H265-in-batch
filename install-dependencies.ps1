@@ -1,10 +1,27 @@
 <#
 .SYNOPSIS
-    Installe FFmpeg, MKVToolNix, et outils annexes pour le pipeline d'encodage.
+    Installe FFmpeg, FFprobe et configure l'arborescence du pipeline d'encodage.
+
 .DESCRIPTION
-    À exécuter UNE SEULE FOIS en tant qu'administrateur.
-    N'installe pas via Chocolatey/Winget pour éviter les dépendances externes en prod.
-    Télécharge directement les builds officiels.
+    Script à exécuter UNE SEULE FOIS en tant qu'administrateur.
+    - Crée l'arborescence sous $InstallRoot
+    - Télécharge le build FFmpeg de BtbN (master, GPL, inclut x265 / NVENC / QSV / AMF)
+    - Détecte les GPU disponibles
+    - Écrit une configuration par défaut
+
+    Ne pollue pas le PATH système : les binaires restent isolés dans $InstallRoot\bin.
+
+.PARAMETER InstallRoot
+    Racine d'installation. Défaut : C:\VideoEncoder
+
+.PARAMETER Force
+    Force le re-téléchargement même si FFmpeg est déjà présent.
+
+.EXAMPLE
+    .\Install-Dependencies.ps1 -InstallRoot "D:\VideoEncoder"
+
+.NOTES
+    Requiert : PowerShell 5.1+, droits administrateur, accès internet sortant.
 #>
 [CmdletBinding()]
 param(
@@ -13,12 +30,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ProgressPreference    = 'SilentlyContinue'  # Sinon Invoke-WebRequest est 10x plus lent
+$ProgressPreference    = 'SilentlyContinue'  # Sinon Invoke-WebRequest est ~10x plus lent
 
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole]::Administrator)) {
+# --- Vérification droits admin ---
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
     throw "Ce script doit être exécuté en tant qu'administrateur."
 }
+
+Write-Host "=== Windows Video Encoder — Installation ===" -ForegroundColor Cyan
+Write-Host "Install root : $InstallRoot`n" -ForegroundColor Cyan
 
 # --- Création de l'arborescence ---
 $dirs = @(
@@ -37,73 +59,124 @@ foreach ($d in $dirs) {
     if (-not (Test-Path $d)) {
         New-Item -ItemType Directory -Path $d -Force | Out-Null
         Write-Host "[+] Créé : $d" -ForegroundColor Green
+    } else {
+        Write-Host "[=] Existe : $d" -ForegroundColor DarkGray
     }
 }
 
-# --- FFmpeg (build BtbN, gpl-shared, inclut x265, NVENC, libsvtav1) ---
-$ffmpegZip = "$env:TEMP\ffmpeg.zip"
-$ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+# --- FFmpeg ---
+$ffmpegExe  = "$InstallRoot\bin\ffmpeg.exe"
+$ffmpegZip  = "$env:TEMP\ffmpeg_btbn.zip"
+$ffmpegUrl  = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+$extractDir = "$env:TEMP\ffmpeg_btbn_extract"
 
-if ($Force -or -not (Test-Path "$InstallRoot\bin\ffmpeg.exe")) {
-    Write-Host "[*] Téléchargement de FFmpeg..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip -UseBasicParsing
-    Expand-Archive -Path $ffmpegZip -DestinationPath "$env:TEMP\ffmpeg_extract" -Force
-    $ffmpegBin = Get-ChildItem "$env:TEMP\ffmpeg_extract" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+if ($Force -or -not (Test-Path $ffmpegExe)) {
+    Write-Host "`n[*] Téléchargement de FFmpeg (BtbN, latest master)..." -ForegroundColor Cyan
+    try {
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip -UseBasicParsing
+    } catch {
+        throw "Échec téléchargement FFmpeg : $($_.Exception.Message)"
+    }
+
+    Write-Host "[*] Extraction..." -ForegroundColor Cyan
+    if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+    Expand-Archive -Path $ffmpegZip -DestinationPath $extractDir -Force
+
+    $ffmpegBin = Get-ChildItem $extractDir -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+    if (-not $ffmpegBin) {
+        throw "ffmpeg.exe introuvable dans l'archive téléchargée."
+    }
+
     Copy-Item "$($ffmpegBin.Directory.FullName)\*.exe" "$InstallRoot\bin\" -Force
-    Remove-Item $ffmpegZip, "$env:TEMP\ffmpeg_extract" -Recurse -Force
-    Write-Host "[+] FFmpeg installé." -ForegroundColor Green
-}
+    Remove-Item $ffmpegZip -Force -ErrorAction SilentlyContinue
+    Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
 
-# --- MKVToolNix (mkvmerge pour remux propre, mkvinfo pour debug) ---
-$mkvUrl = "https://mkvtoolnix.download/windows/releases/latest/mkvtoolnix-64-bit-latest.7z"
-# Note : installation manuelle conseillée car MKVToolNix change souvent ses URLs.
-# Alternative : utiliser le portable depuis https://mkvtoolnix.download/downloads.html
+    Write-Host "[+] FFmpeg installé dans $InstallRoot\bin\" -ForegroundColor Green
+} else {
+    Write-Host "`n[=] FFmpeg déjà présent. Utilise -Force pour réinstaller." -ForegroundColor DarkGray
+}
 
 # --- Vérifications ---
 Write-Host "`n=== Vérifications ===" -ForegroundColor Yellow
-& "$InstallRoot\bin\ffmpeg.exe" -version | Select-Object -First 2
-& "$InstallRoot\bin\ffprobe.exe" -version | Select-Object -First 1
+$ffmpegVersion = & "$InstallRoot\bin\ffmpeg.exe" -version 2>&1 | Select-Object -First 1
+Write-Host "FFmpeg : $ffmpegVersion" -ForegroundColor White
 
-# Vérifier support x265 et NVENC
+$ffprobeVersion = & "$InstallRoot\bin\ffprobe.exe" -version 2>&1 | Select-Object -First 1
+Write-Host "FFprobe : $ffprobeVersion" -ForegroundColor White
+
+# Vérifier support des encodeurs HEVC
+Write-Host "`n=== Encodeurs HEVC disponibles ===" -ForegroundColor Yellow
 $encoders = & "$InstallRoot\bin\ffmpeg.exe" -hide_banner -encoders 2>&1
-if ($encoders -match 'libx265')      { Write-Host "[OK] libx265 disponible"      -ForegroundColor Green }
-if ($encoders -match 'hevc_nvenc')   { Write-Host "[OK] hevc_nvenc disponible"   -ForegroundColor Green }
-if ($encoders -match 'hevc_qsv')     { Write-Host "[OK] hevc_qsv disponible"     -ForegroundColor Green }
-if ($encoders -match 'hevc_amf')     { Write-Host "[OK] hevc_amf disponible"     -ForegroundColor Green }
+$hevcEncoders = @{
+    'libx265'    = 'CPU x265 (qualité max)'
+    'hevc_nvenc' = 'NVIDIA NVENC (rapide)'
+    'hevc_qsv'   = 'Intel QuickSync'
+    'hevc_amf'   = 'AMD AMF'
+}
+foreach ($enc in $hevcEncoders.Keys) {
+    if ($encoders -match "\b$enc\b") {
+        Write-Host "  [OK] $enc — $($hevcEncoders[$enc])" -ForegroundColor Green
+    } else {
+        Write-Host "  [--] $enc — non disponible" -ForegroundColor DarkGray
+    }
+}
 
 # --- Détection GPU ---
-$gpu = Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion
 Write-Host "`n=== GPU détecté(s) ===" -ForegroundColor Yellow
-$gpu | Format-Table -AutoSize
+try {
+    $gpus = Get-CimInstance Win32_VideoController -ErrorAction Stop |
+        Select-Object Name, DriverVersion, @{N='AdapterRAM_GB';E={[math]::Round($_.AdapterRAM / 1GB, 2)}}
+    $gpus | Format-Table -AutoSize
+} catch {
+    Write-Host "[!] Impossible de détecter les GPU." -ForegroundColor Yellow
+}
 
 # --- Configuration par défaut ---
-$defaultConfig = @{
-    SourceRoot          = "Y:\"
-    TempRoot            = "$InstallRoot\temp"
-    StateRoot           = "$InstallRoot\state"
-    LogRoot             = "$InstallRoot\logs"
-    FFmpegPath          = "$InstallRoot\bin\ffmpeg.exe"
-    FFprobePath         = "$InstallRoot\bin\ffprobe.exe"
-    Encoder             = "libx265"          # "libx265" | "hevc_nvenc" | "hevc_qsv"
-    CRF                 = 18
-    Preset              = "medium"
-    Extensions          = @(".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov")
-    ParallelJobs        = 1                  # 1 pour CPU x265, 2-4 pour NVENC
-    MinFreeSpaceGB      = 50
-    SafeMode            = $true              # NE JAMAIS METTRE À FALSE EN PRODUCTION
-    DryRun              = $false
-    DeleteOriginal      = $false             # Active manuellement après tests
-    KeepIfLarger        = $true              # Si réencodage gonfle le fichier, on garde l'original
-    MaxFileSizeGB       = 50                 # Skip fichiers > 50 Go (probable corruption)
-    MinFileSizeMB       = 10                 # Skip fichiers < 10 Mo (probable sample/corrompu)
-    SkipPatterns        = @("*sample*", "*trailer*", "*.partial.*")
-} | ConvertTo-Json -Depth 4
-
 $cfgPath = "$InstallRoot\config\encoder.config.json"
 if (-not (Test-Path $cfgPath) -or $Force) {
-    Set-Content -Path $cfgPath -Value $defaultConfig -Encoding UTF8
-    Write-Host "[+] Configuration par défaut écrite : $cfgPath" -ForegroundColor Green
+    $defaultConfig = [ordered]@{
+        SourceRoot      = "Y:\"
+        TempRoot        = "$InstallRoot\temp"
+        StateRoot       = "$InstallRoot\state"
+        LogRoot         = "$InstallRoot\logs"
+        ReportRoot      = "$InstallRoot\reports"
+        FFmpegPath      = "$InstallRoot\bin\ffmpeg.exe"
+        FFprobePath     = "$InstallRoot\bin\ffprobe.exe"
+        Encoder         = "libx265"
+        CRF             = 20
+        Preset          = "medium"
+        Extensions      = @(".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov")
+        ParallelJobs    = 1
+        MinFreeSpaceGB  = 50
+        SafeMode        = $true
+        DryRun          = $false
+        DeleteOriginal  = $false
+        KeepIfLarger    = $true
+        MaxFileSizeGB   = 50
+        MinFileSizeMB   = 10
+        SkipPatterns    = @("*sample*", "*trailer*", "*.partial.*")
+        TimeoutHours    = 24
+    }
+
+    $defaultConfig | ConvertTo-Json -Depth 4 | Set-Content -Path $cfgPath -Encoding UTF8
+    Write-Host "`n[+] Configuration par défaut écrite : $cfgPath" -ForegroundColor Green
+} else {
+    Write-Host "`n[=] Configuration existante préservée : $cfgPath" -ForegroundColor DarkGray
 }
 
 Write-Host "`n=== Installation terminée ===" -ForegroundColor Green
-Write-Host "Edite $cfgPath avant de lancer." -ForegroundColor Yellow
+Write-Host @"
+
+Prochaines étapes :
+  1. Copier les scripts du repo vers $InstallRoot\scripts\
+       Copy-Item -Recurse .\scripts\* $InstallRoot\scripts\
+  2. Éditer la config :
+       notepad $cfgPath
+  3. Premier dry-run :
+       $InstallRoot\scripts\Invoke-VideoEncoder.ps1 -DryRun -MaxFiles 10
+  4. Test réel limité :
+       $InstallRoot\scripts\Invoke-VideoEncoder.ps1 -MaxFiles 5
+  5. Enregistrer la tâche planifiée :
+       $InstallRoot\scripts\Register-EncoderTask.ps1
+
+"@ -ForegroundColor Cyan
