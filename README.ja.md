@@ -143,30 +143,6 @@ C:\VideoEncoder\
     └── encoder.config.json       # 中央設定ファイル
 ```
 
----
-
-## 📊 結果とモニタリング
-
-### 状態ファイル
-- **processed.db** : エンコーディング履歴を記録した SQLite データベース
-- **queue.json** : 現在保留中のジョブ
-- **failed.json** : エンコーディングに失敗したファイル（エラー詳細付き）
-- **skipped.json** : エンコーディングされなかったファイル（既に HEVC、サイズ不適切など）
-
-### ログ
-- **main/encoder_YYYYMMDD.log** : 高レベルのバッチログ
-- **jobs/{jobid}.log** : ファイル単位の詳細ログ
-- **ffmpeg/{jobid}.log** : FFmpeg 生出力
-- **daily/report_YYYYMMDD.txt** : サマリー（節約容量、処理時間、ETA）
-
-### ログ出力例
-```
-2026-05-16T19:15:42 [INFO] [Job:abc123def] [1/150] 開始 : Y:\Videos\movie.mp4
-2026-05-16T19:45:22 [INFO] [Job:abc123def] 成功 (saved_gb: 2.4, saved_pct: 32.1%, time_min: 29.7)
-```
-
----
-
 ## 🔄 スケジュール実行（Windows）
 
 1. スケジュール済みタスクを作成
@@ -187,41 +163,3 @@ C:\VideoEncoder\
 ✅ **選別的エンコーディング** : 既に最適化されたコーデック（HEVC、AV1、DV）をスキップ
 
 ---
-
-## 📝 ライセンス
-
-MIT ライセンス - 詳細は LICENSE ファイルを参照
-
----
-
-## 🤝 貢献
-
-貢献を歓迎します。Issue や Pull Request を開いてください。
-
----
-
-## ❓ トラブルシューティング
-
-### "FFmpeg exit code 1"
-→ `logs/ffmpeg/{jobid}.log` で FFmpeg エラーを確認
-→ FFmpeg が入力コーデックをサポートしていることを確認
-→ 手動エンコーディングをテスト：`ffmpeg -i input.mp4 -c:v libx265 -crf 23 output.mkv`
-
-### "Espace temp insuffisant"（temp 容量不足）
-→ temp ドライブのサイズを増やすか、設定で大きいディスクを指定
-→ `MaxFileSizeGB` パラメータを削減
-
-### "Une autre instance tourne déjà"（別のインスタンスが実行中）
-→ プロセスロックを確認：古い場合は `state/lock.pid` を削除
-→ 他の PowerShell インスタンスが実行していないことを確認
-
-### "Validation échouée"（検証失敗）
-→ エンコードされたファイルが破損している可能性
-→ ディスク状態と FFmpeg バージョンを確認
-→ 別のプリセット（遅いほうが安定）で再試行
-
----
-
-**最終更新:** 2026-05-16  
-**作成者:** ex4s  
-**状態:** 開発中 ✨
