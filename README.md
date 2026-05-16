@@ -164,3 +164,8 @@ C:\VideoEncoder\
 ✅ **Selective encoding** : Skips already-optimized codecs (HEVC, AV1, DV)
 
 ---
+
+<img width="1322" height="800" alt="hot take" src="https://github.com/user-attachments/assets/d49537f2-7573-4712-8c83-e62350967a3f" />
+
+
+---
