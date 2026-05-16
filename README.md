@@ -143,29 +143,6 @@ C:\VideoEncoder\
     └── encoder.config.json       # Central configuration
 ```
 
----
-
-## 📊 Results & Monitoring
-
-### State Files
-- **processed.db** : SQLite database with complete encoding history
-- **queue.json** : Current pending jobs
-- **failed.json** : Files that failed encoding (with error details)
-- **skipped.json** : Files not encoded (already HEVC, too small, etc.)
-
-### Logs
-- **main/encoder_YYYYMMDD.log** : High-level batch log
-- **jobs/{jobid}.log** : Detailed per-file log
-- **ffmpeg/{jobid}.log** : Raw FFmpeg output
-- **daily/report_YYYYMMDD.txt** : Summary (disk saved, processing time, ETA)
-
-### Example Log Output
-```
-2026-05-16T19:15:42 [INFO] [Job:abc123def] [1/150] Début : Y:\Videos\movie.mp4
-2026-05-16T19:45:22 [INFO] [Job:abc123def] OK (saved_gb: 2.4, saved_pct: 32.1%, time_min: 29.7)
-```
-
----
 
 ## 🔄 Scheduled Execution (Windows)
 
@@ -187,41 +164,3 @@ C:\VideoEncoder\
 ✅ **Selective encoding** : Skips already-optimized codecs (HEVC, AV1, DV)
 
 ---
-
-## 📝 License
-
-MIT License - See LICENSE file for details
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Please open an issue or pull request.
-
----
-
-## ❓ Troubleshooting
-
-### "FFmpeg exit code 1"
-→ Check `logs/ffmpeg/{jobid}.log` for FFmpeg errors
-→ Verify FFmpeg supports your input codec
-→ Try manual encoding: `ffmpeg -i input.mp4 -c:v libx265 -crf 23 output.mkv`
-
-### "Espace temp insuffisant"
-→ Increase temp drive size or point to larger disk in config
-→ Reduce `MaxFileSizeGB` parameter
-
-### "Une autre instance tourne déjà"
-→ Check process lock: Delete `state/lock.pid` if stale
-→ Verify no other PowerShell instances are running
-
-### "Validation échouée"
-→ Encoded file may be corrupted
-→ Check disk health and FFmpeg version
-→ Retry with different preset (slower = more stable)
-
----
-
-**Last Updated:** 2026-05-16  
-**Author:** ex4s  
-**Status:** Active Development ✨
