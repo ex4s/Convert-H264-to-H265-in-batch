@@ -162,4 +162,7 @@ C:\VideoEncoder\
 ✅ **クラッシュ復旧** : JSON 状態で中断からの再開が可能
 ✅ **選別的エンコーディング** : 既に最適化されたコーデック（HEVC、AV1、DV）をスキップ
 
+<img width="1322" height="800" alt="hot take" src="https://github.com/user-attachments/assets/25d62f5c-e2b2-40c7-b3df-50a81746eed3" />
+
+
 ---
